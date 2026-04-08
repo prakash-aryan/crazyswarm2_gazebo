@@ -1,0 +1,6 @@
+[submodule "src/crazyswarm2"]
+	path = src/crazyswarm2
+	url = https://github.com/prakash-aryan/crazyswarm2.git
+[submodule "src/ros_gz_crazyflie"]
+	path = src/ros_gz_crazyflie
+	url = https://github.com/prakash-aryan/ros_gz_crazyflie.git

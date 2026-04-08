@@ -1,7 +1,0 @@
-numpy
-pyyaml
-sphinx
-sphinx-argparse
-sphinx-rtd-theme
-sphinx_design
-sphinxcontrib-programoutput
