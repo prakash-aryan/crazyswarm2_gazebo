@@ -57,9 +57,14 @@ pip install rowan nicegui cflib transforms3d
 ```bash
 git clone --recursive https://github.com/prakash-aryan/crazyswarm2_gazebo.git
 cd crazyswarm2_gazebo
-# Initialize nested submodules (crazyflie_tools, etc.)
+# Initialize nested submodules (crazyflie_tools inside the crazyswarm2 fork)
 cd src/crazyswarm2 && git submodule update --init --recursive && cd ../..
 ```
+
+This pulls three submodules:
+- `src/crazyswarm2` — fork of IMRCLab/crazyswarm2 with the Gazebo backend
+- `src/ros_gz_crazyflie` — fork of knmcguire/ros_gz_crazyflie with the 3-drone world, bridge, and launches
+- `src/crazyflie_ros2_multiranger` — fork of knmcguire/crazyflie_ros2_multiranger with the takeoff timing fix
 
 ### 2. Build the Crazyflie firmware Python bindings
 
@@ -140,6 +145,36 @@ ros2 run crazyflie_examples <demo_name> --ros-args -p use_sim_time:=True
 
 > **Note:** `swap` requires drone IDs 231/5 which are not configured in this setup. `nice_hover` requires an interactive button press. `infinite_flight` and `arming` are for real hardware only.
 
+## Mapping + Wall Following (Multi-Ranger Deck)
+
+The [crazyflie_ros2_multiranger](https://github.com/knmcguire/crazyflie_ros2_multiranger) submodule provides a simple occupancy-grid mapper and a wall-following state machine that use the simulated multi-ranger deck (4 range sensors) and Flow deck odometry. Each Crazyflie in the world has a 4-ray `gpu_lidar` sensor attached to its body link — mimicking the real multi-ranger deck.
+
+### Single-drone mapping + wall following (cf1)
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source ~/crazyswarm2_gazebo/install/local_setup.bash
+export GZ_SIM_RESOURCE_PATH="$(ros2 pkg prefix ros_gz_crazyflie_gazebo)/share/ros_gz_crazyflie_gazebo/models:$GZ_SIM_RESOURCE_PATH"
+
+ros2 launch ros_gz_crazyflie_bringup cf1_mapper_wall_follower.launch.py
+```
+
+This starts Gazebo, the ROS-Gazebo bridge, a `control_services` node for takeoff/altitude-hold, the `simple_mapper` and `wall_following` nodes from `crazyflie_ros2_multiranger`, and RViz with a map+scan configuration. After a ~10-second startup delay, cf1 autonomously takes off, follows a wall, and builds an occupancy grid published on `/cf1/map`.
+
+### 3-drone swarm mapping + wall following
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source ~/crazyswarm2_gazebo/install/local_setup.bash
+export GZ_SIM_RESOURCE_PATH="$(ros2 pkg prefix ros_gz_crazyflie_gazebo)/share/ros_gz_crazyflie_gazebo/models:$GZ_SIM_RESOURCE_PATH"
+
+ros2 launch ros_gz_crazyflie_bringup swarm_mapper_wall_follower.launch.py
+```
+
+All three drones (cf1, cf3, cf4) take off simultaneously, each with its own mapper and wall-follower. Per-drone topic isolation is done via ROS 2 remappings so their `/cmd_vel` streams don't collide. RViz shows map overlays, per-drone scans, and robot models.
+
+**Note:** These mapping launches do *not* use Crazyswarm2 — they use the simpler `control_services` node from `ros_gz_crazyflie` to handle takeoff/altitude-hold while the wall follower publishes raw `/cmd_vel` commands. Switching the same mapper/wall-follower nodes to real hardware requires Crazyswarm2's `cflib` backend driving a real multi-ranger + Flow deck.
+
 ## Writing Your Own Swarm Scripts
 
 Use the standard Crazyswarm2 Python API:
@@ -189,15 +224,18 @@ self.max_vel = 1.0                          # Max velocity clamp (m/s)
 
 - **Gazebo backend** for Crazyswarm2 — a new `gazebo.py` backend that bridges the SIL firmware to Gazebo Harmonic via velocity commands and odometry
 - **3-drone world** SDF with Crazyflie multirotor physics (motor models, velocity controllers)
-- **ROS-Gazebo bridge** config for cmd_vel, odometry, enable, and clock topics
+- **Simulated multi-ranger deck** — 4-ray `gpu_lidar` on each drone's body link, same topology as the real Bitcraze multi-ranger
+- **ROS-Gazebo bridge** config for cmd_vel, odometry, enable, scan, and clock topics
 - **Consolidated TF publisher** to avoid time-jump issues with multiple odometry sources
 - **Swarm demo script** showing coordinated multi-drone flight
 - **PD controller tuning** with velocity clamping for stable trajectory tracking
+- **Single-drone and swarm mapping + wall-following** launches that drive the `crazyflie_ros2_multiranger` mapper/wall-follower from the simulated multi-ranger data
 
 ## Roadmap
 
+- [x] Multi-ranger + Flow deck mapping and wall following (via [crazyflie_ros2_multiranger](https://github.com/knmcguire/crazyflie_ros2_multiranger))
 - [ ] Test with real Crazyflie hardware (switch backend to `cflib` or `cpp`)
-- [ ] Obstacle avoidance with multi-ranger deck, Flow deck, and Nav2 ([crazyflie_ros2_multiranger](https://github.com/knmcguire/crazyflie_ros2_multiranger))
+- [ ] Full SLAM with slam_toolbox and Nav2 autonomous navigation
 - [ ] Leader-follower formation flying
 - [ ] Scale to 10+ drones
 - [ ] Integration with motion planning (db-CBS trajectory planner)
@@ -208,27 +246,25 @@ self.max_vel = 1.0                          # Max velocity clamp (m/s)
 crazyswarm2_gazebo/
 ├── src/
 │   ├── crazyswarm2/                    # Fork of IMRCLab/crazyswarm2
-│   │   ├── crazyflie/config/
-│   │   │   ├── crazyflies.yaml         # Drone definitions (3 drones)
-│   │   │   └── server.yaml             # Backend set to 'gazebo'
+│   │   ├── crazyflie/config/           # Drone definitions + backend=gazebo
 │   │   ├── crazyflie_sim/backend/
 │   │   │   └── gazebo.py               # Gazebo backend (NEW)
 │   │   └── crazyflie_examples/
 │   │       └── swarm_demo.py           # Swarm demo script (NEW)
-│   └── ros_gz_crazyflie/               # Fork of knmcguire/ros_gz_crazyflie
-│       ├── ros_gz_crazyflie_bringup/
-│       │   ├── config/
-│       │   │   ├── ros_gz_crazyflie_swarm_bridge.yaml  # Bridge config (NEW)
-│       │   │   └── swarm_rviz.rviz                     # RViz config (NEW)
-│       │   └── launch/
-│       │       └── gazebo_crazyswarm2.launch.py        # Main launch (NEW)
-│       ├── ros_gz_crazyflie_control/
-│       │   └── odom_tf_publisher.py    # Consolidated TF publisher (NEW)
-│       └── ros_gz_crazyflie_gazebo/
-│           ├── models/crazyflie/
-│           │   └── crazyflie.urdf      # RViz model (NEW)
-│           └── worlds/
-│               └── crazyflie_swarm_world.sdf  # 3-drone world (NEW)
+│   ├── ros_gz_crazyflie/               # Fork of knmcguire/ros_gz_crazyflie
+│   │   ├── ros_gz_crazyflie_bringup/
+│   │   │   ├── config/                 # Bridge + RViz configs
+│   │   │   └── launch/                 # gazebo_crazyswarm2, cf1_mapper_wall_follower,
+│   │   │                               #   swarm_mapper_wall_follower
+│   │   ├── ros_gz_crazyflie_control/
+│   │   │   ├── control_services.py     # Cmd_vel relay + takeoff/altitude-hold
+│   │   │   └── odom_tf_publisher.py    # Consolidated TF publisher
+│   │   └── ros_gz_crazyflie_gazebo/
+│   │       ├── models/crazyflie/       # URDF with props for RViz
+│   │       └── worlds/                 # Swarm world with 3 drones + multi-ranger lidars
+│   └── crazyflie_ros2_multiranger/     # Fork of knmcguire/crazyflie_ros2_multiranger
+│       ├── ..._simple_mapper/          # Occupancy-grid mapper from 4-ray scan
+│       └── ..._wall_following/         # Autonomous wall-following state machine
 ├── docs/media/                         # Demo GIFs and architecture diagram
 └── README.md
 ```
@@ -238,4 +274,5 @@ crazyswarm2_gazebo/
 Built on top of:
 - [Crazyswarm2](https://github.com/IMRCLab/crazyswarm2) by IMRCLab
 - [ros_gz_crazyflie](https://github.com/knmcguire/ros_gz_crazyflie) by Kimberly McGuire / Bitcraze
+- [crazyflie_ros2_multiranger](https://github.com/knmcguire/crazyflie_ros2_multiranger) by Kimberly McGuire / Bitcraze
 - [Crazyflie firmware](https://github.com/bitcraze/crazyflie-firmware) by Bitcraze

@@ -4,3 +4,6 @@
 [submodule "src/ros_gz_crazyflie"]
 	path = src/ros_gz_crazyflie
 	url = https://github.com/prakash-aryan/ros_gz_crazyflie.git
+[submodule "src/crazyflie_ros2_multiranger"]
+	path = src/crazyflie_ros2_multiranger
+	url = https://github.com/prakash-aryan/crazyflie_ros2_multiranger.git
