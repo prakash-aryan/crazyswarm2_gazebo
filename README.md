@@ -27,6 +27,11 @@ Each drone flies a different precomputed trajectory simultaneously.
 
 ![Multi Trajectory](docs/media/multi_trajectory.gif)
 
+### Formation Morphing
+3 drones cycle through line → triangle → V-shape → circle → line formations, flown at staggered altitudes so transitions can't collide.
+
+![Formation Morphing](docs/media/formation_morphing.gif)
+
 ## Prerequisites
 
 - **Ubuntu 24.04**
@@ -140,6 +145,8 @@ ros2 run crazyflie_examples <demo_name> --ros-args -p use_sim_time:=True
 | `swarm_demo` | All 3 | Circle formation, rotate positions, return to start, land |
 | `figure8` | All 3 | Upload and execute figure-8 polynomial trajectory from CSV |
 | `multi_trajectory` | All 3 | Each drone flies a different trajectory |
+| `leader_follower` | 2+ | cf1 leads a square path; cf3/cf4 follow at fixed offsets |
+| `formation_morphing` | Any | Cycle through line, triangle, V, circle formations |
 | `cmd_full_state` | 1 (cf1) | Stream full-state setpoints (pos/vel/acc/yaw/omega) at 30 Hz |
 | `group_mask` | All 3 | Selectively command subsets of the swarm |
 
